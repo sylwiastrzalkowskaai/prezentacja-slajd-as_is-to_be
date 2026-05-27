@@ -1,0 +1,1545 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interaktywny Diagram Procesu Ofertowania - AS-IS / TO-BE</title>
+    <!-- Tailwind CSS dla nowoczesnego designu -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Czcionka Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- FontAwesome dla ikon -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        /* Style dla płótna interaktywnego SVG */
+        .canvas-container {
+            cursor: grab;
+            user-select: none;
+        }
+        .canvas-container:active {
+            cursor: grabbing;
+        }
+        /* Efekt podświetlenia aktywnego węzła */
+        .node-active {
+            stroke: #2563eb !important;
+            stroke-width: 4px !important;
+            filter: drop-shadow(0 0 15px rgba(37, 99, 235, 0.6));
+        }
+        /* Animowane wąskie gardła */
+        .bottleneck-pulse {
+            animation: pulse-red 2s infinite;
+        }
+        @keyframes pulse-red {
+            0% {
+                filter: drop-shadow(0 0 2px rgba(239, 68, 68, 0.4));
+            }
+            50% {
+                filter: drop-shadow(0 0 12px rgba(239, 68, 68, 0.8));
+            }
+            100% {
+                filter: drop-shadow(0 0 2px rgba(239, 68, 68, 0.4));
+            }
+        }
+        /* Efekt świecenia bazy danych AI */
+        .database-glow {
+            animation: pulse-green 3s infinite;
+        }
+        @keyframes pulse-green {
+            0% { filter: drop-shadow(0 0 5px rgba(16, 185, 129, 0.4)); }
+            50% { filter: drop-shadow(0 0 20px rgba(16, 185, 129, 0.8)); }
+            100% { filter: drop-shadow(0 0 5px rgba(16, 185, 129, 0.4)); }
+        }
+        /* Płynne przejścia dla elementów SVG */
+        .transition-all-svg {
+            transition: fill 0.4s ease, stroke 0.4s ease, opacity 0.4s ease, stroke-dasharray 0.4s ease;
+        }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-100 overflow-hidden h-screen flex flex-col">
+
+    <header class="bg-slate-950 border-b border-slate-800 p-4 flex flex-wrap items-center justify-between gap-4 z-10 shrink-0">
+        <div class="flex items-center gap-3">
+            <div class="p-2 bg-indigo-600 text-white rounded-lg" id="headerIcon">
+                <i class="fa-solid fa-diagram-project text-xl"></i>
+            </div>
+            <div>
+                <h1 class="text-lg font-bold tracking-tight flex items-center gap-2">
+                    Proces Ofertowania Części 
+                    <span id="badgeCurrentMode" class="text-xs px-2.5 py-0.5 rounded-full font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30">AS-IS</span>
+                </h1>
+                <p class="text-xs text-slate-400">Porównanie stanu obecnego z automatyzacjami i LLM na wzór Proces_3</p>
+            </div>
+        </div>
+
+        <!-- Panel nawigacji diagramu i trybów -->
+        <div class="flex flex-wrap items-center gap-3">
+            <!-- Kontrola Widoku -->
+            <div class="bg-slate-800 p-1 rounded-lg flex border border-slate-700">
+                <button id="viewAsIsBtn" class="px-3 py-1.5 text-xs font-semibold rounded-md bg-amber-500 text-slate-950 transition">
+                    Stan Obecny (AS-IS)
+                </button>
+                <button id="viewToBeBtn" class="px-3 py-1.5 text-xs font-semibold rounded-md text-slate-300 hover:text-white transition">
+                    Wizja Przyszła (TO-BE)
+                </button>
+            </div>
+
+            <!-- Sterowanie zoomem -->
+            <div class="bg-slate-800 px-2 py-1.5 rounded-lg flex items-center gap-2 border border-slate-700">
+                <button id="zoomOutBtn" class="w-8 h-8 rounded hover:bg-slate-700 text-slate-300 flex items-center justify-center transition" title="Oddal">
+                    <i class="fa-solid fa-magnifying-glass-minus"></i>
+                </button>
+                <span id="zoomPercent" class="text-xs font-mono font-semibold w-12 text-center text-slate-400">100%</span>
+                <button id="zoomInBtn" class="w-8 h-8 rounded hover:bg-slate-700 text-slate-300 flex items-center justify-center transition" title="Przybliż">
+                    <i class="fa-solid fa-magnifying-glass-plus"></i>
+                </button>
+                <button id="zoomResetBtn" class="w-8 h-8 rounded hover:bg-slate-700 text-slate-300 flex items-center justify-center transition" title="Dopasuj">
+                    <i class="fa-solid fa-compress"></i>
+                </button>
+            </div>
+
+            <button id="walkthroughBtn" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold flex items-center gap-2 transition shadow-lg shadow-blue-900/30">
+                <i class="fa-solid fa-play"></i> Symulacja Scenariusza
+            </button>
+        </div>
+    </header>
+
+    <div id="legendContainer" class="bg-slate-950 px-4 py-2.5 border-b border-slate-800 flex flex-wrap items-center gap-6 text-xs text-slate-400 z-10 shrink-0">
+        <span class="font-medium text-slate-300"><i class="fa-solid fa-circle-info mr-1 text-blue-400"></i> Legenda:</span>
+        
+        <!-- Standardowa sekcja legendy zmieniająca się dynamicznie -->
+        <div id="legendAsIs" class="flex flex-wrap items-center gap-6">
+            <div class="flex items-center gap-1.5">
+                <span class="w-3.5 h-3.5 bg-cyan-900 border border-cyan-400 rounded-sm"></span>
+                <span>Dane Wejściowe</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+                <span class="w-3.5 h-3.5 bg-amber-500/20 border border-amber-500 rounded-sm"></span>
+                <span>Zadanie Handlowca</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+                <span class="w-3.5 h-3.5 bg-orange-500/20 border border-orange-500 rotate-45 transform scale-75 origin-center"></span>
+                <span class="ml-0.5">Bramka Decyzyjna</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+                <span class="w-3.5 h-3.5 bg-red-950 border border-red-500 rounded-sm bottleneck-pulse"></span>
+                <span class="text-red-400 font-semibold">Wąskie gardło / Straty (Muda) 🔴</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+                <span class="w-3.5 h-3.5 bg-emerald-950 border border-emerald-500 rounded-sm"></span>
+                <span>Sukces 🟢</span>
+            </div>
+        </div>
+
+        <div id="legendToBe" class="flex flex-wrap items-center gap-6 hidden">
+            <div class="flex items-center gap-1.5">
+                <span class="w-3.5 h-3.5 bg-purple-900/60 border border-purple-400 rounded-sm"></span>
+                <span class="text-purple-300 font-semibold">Automatyzacja (System / AI) 💜</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+                <span class="w-3.5 h-3.5 bg-yellow-600/30 border border-yellow-400 rounded-sm"></span>
+                <span class="text-yellow-200 font-semibold">Praca Człowieka (Decyzje/Ekspertyza) 💛</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+                <span class="w-3.5 h-3.5 bg-emerald-950 border border-emerald-500 rounded-sm"></span>
+                <span>Sfinalizowanie zamówienia 🟢</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+                <span class="w-3.5 h-3.5 bg-emerald-950 border border-emerald-400 rounded-sm database-glow"></span>
+                <span class="text-emerald-400 font-medium">Baza Wiedzy / Silnik AI 🟢</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Główna przestrzeń: Diagram po lewej, Panel detali po prawej -->
+    <main class="flex-1 flex overflow-hidden relative">
+
+        <div class="flex-1 h-full overflow-hidden bg-slate-900 relative canvas-container" id="canvasViewport">
+            <!-- Instrukcja dla użytkownika -->
+            <div class="absolute bottom-4 left-4 bg-slate-950/80 backdrop-blur border border-slate-800 px-3 py-2 rounded-lg text-xs text-slate-400 pointer-events-none z-10">
+                <i class="fa-solid fa-hand-pointer mr-1"></i> Chwyć i przeciągaj, aby przesuwać. Kliknij element, by zobaczyć detale.
+            </div>
+
+            <!-- SVG Diagram -->
+            <svg id="processSvg" class="absolute top-0 left-0 w-[3600px] h-[650px]" xmlns="http://www.w3.org/2000/svg">
+                <!-- Definicje grotów strzałek (markerów) -->
+                <defs>
+                    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                        <path d="M 0 1 L 10 5 L 0 9 z" fill="#475569" />
+                    </marker>
+                    <marker id="arrow-active" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                        <path d="M 0 1 L 10 5 L 0 9 z" fill="#a855f7" />
+                    </marker>
+                    <marker id="arrow-red" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                        <path d="M 0 1 L 10 5 L 0 9 z" fill="#ef4444" />
+                    </marker>
+                </defs>
+
+                <!-- Siatka pomocnicza w tle -->
+                <g stroke="#1e293b" stroke-width="1" fill="none">
+                    <path d="M 0 100 L 3600 100 M 0 200 L 3600 200 M 0 300 L 3600 300 M 0 400 L 3600 400 M 0 500 L 3600 500" />
+                    <path d="M 100 0 L 100 650 M 300 0 L 300 650 M 500 0 L 500 650 M 700 0 L 700 650 M 900 0 L 900 650 M 1100 0 L 1100 650 M 1300 0 L 1300 650 M 1500 0 L 1500 650 M 1700 0 L 1700 650 M 1900 0 L 1900 650 M 2100 0 L 2100 650 M 2300 0 L 2300 650 M 2500 0 L 2500 650 M 2700 0 L 2700 650 M 2900 0 L 2900 650 M 3100 0 L 3100 650 M 3300 0 L 3300 650 M 3500 0 L 3500 650" />
+                </g>
+
+                <!-- Nagłówki Faz (Swimlanes) -->
+                <g opacity="0.8">
+                    <!-- Faza I -->
+                    <rect x="10" y="15" width="530" height="40" rx="6" fill="#0f172a" stroke="#334155" stroke-dasharray="4" />
+                    <text id="phaseText1" x="35" y="40" fill="#cbd5e1" font-size="13" font-weight="700">FAZA I: Wpływ i Weryfikacja Zapytania</text>
+                    
+                    <!-- Faza II -->
+                    <rect x="560" y="15" width="1240" height="40" rx="6" fill="#0f172a" stroke="#334155" stroke-dasharray="4" />
+                    <text id="phaseText2" x="585" y="40" fill="#cbd5e1" font-size="13" font-weight="700">FAZA II: Identyfikacja i Dobór Produktu (Wąskie Gardła)</text>
+
+                    <!-- Faza III -->
+                    <rect x="1820" y="15" width="780" height="40" rx="6" fill="#0f172a" stroke="#334155" stroke-dasharray="4" />
+                    <text id="phaseText3" x="1845" y="40" fill="#cbd5e1" font-size="13" font-weight="700">FAZA III: Wycena i Konstruowanie Oferty</text>
+
+                    <!-- Faza IV -->
+                    <rect x="2620" y="15" width="870" height="40" rx="6" fill="#0f172a" stroke="#334155" stroke-dasharray="4" />
+                    <text id="phaseText4" x="2645" y="40" fill="#cbd5e1" font-size="13" font-weight="700">FAZA IV: Wynik i Follow-up</text>
+                </g>
+
+                <!-- Połączenia (Konektory) - Linie i Strzałki -->
+                <g id="connectors" fill="none" stroke="#475569" stroke-width="2" marker-end="url(#arrow)" class="transition-all-svg">
+                    <!-- Wejścia do Krok 1 -->
+                    <path id="path-InA-K1" d="M 140 150 L 170 150 L 170 200 L 190 200" />
+                    <path id="path-InB-K1" d="M 140 250 L 170 250 L 170 200 L 190 200" />
+                    
+                    <!-- K1 do B1 -->
+                    <path id="path-K1-B1" d="M 320 200 L 350 200" />
+                    
+                    <!-- B1 (Nie) do KSpec -->
+                    <path id="path-B1-KSpec" d="M 390 240 L 390 320 L 410 320" />
+                    <!-- B1 (Tak) bypass do K2 -->
+                    <path id="path-B1-K2" d="M 430 200 L 590 200" />
+                    
+                    <!-- KSpec do K2 -->
+                    <path id="path-KSpec-K2" d="M 540 320 L 565 320 L 565 200 L 590 200" />
+                    
+                    <!-- K2 do K3 -->
+                    <path id="path-K2-K3" d="M 720 200 L 750 200" />
+                    
+                    <!-- K3 do K4 -->
+                    <path id="path-K3-K4" d="M 880 200 L 910 200" />
+                    
+                    <!-- K4 do B2 -->
+                    <path id="path-K4-B2" d="M 1040 200 L 1070 200" />
+                    
+                    <!-- B2 (Tak) do K5 -->
+                    <path id="path-B2-K5" d="M 1110 240 L 1110 320 L 1140 320" />
+                    <!-- B2 (Nie) bypass do K6 -->
+                    <path id="path-B2-K6" d="M 1150 200 L 1850 200" />
+                    
+                    <!-- K5 do B3 -->
+                    <path id="path-K5-B3" d="M 1270 320 L 1310 320" />
+                    
+                    <!-- B3 (Nie) do K5_Nie -->
+                    <path id="path-B3-K5_Nie" d="M 1350 360 L 1350 400 L 1390 400" />
+                    <!-- B3 (Tak) do K5_Tak -->
+                    <path id="path-B3-K5_Tak" d="M 1350 280 L 1350 240 L 1390 240" />
+                    
+                    <!-- K5_Tak do K6 -->
+                    <path id="path-K5_Tak-K6" d="M 1520 240 L 1780 240 L 1780 200 L 1850 200" />
+                    <!-- K5_Nie do K6 -->
+                    <path id="path-K5_Nie-K6" d="M 1520 400 L 1780 400 L 1780 200 L 1850 200" />
+                    
+                    <!-- K6 do B4 -->
+                    <path id="path-K6-B4" d="M 1980 200 L 2010 200" />
+                    
+                    <!-- B4 (Nie) do K7 -->
+                    <path id="path-B4-K7" d="M 2050 240 L 2050 320 L 2080 320" />
+                    <!-- B4 (Tak) bypass do K8 -->
+                    <path id="path-B4-K8" d="M 2090 200 L 2240 200" />
+                    
+                    <!-- K7 do K8 -->
+                    <path id="path-K7-K8" d="M 2210 320 L 2225 320 L 2225 200 L 2240 200" />
+                    
+                    <!-- K8 do K9 -->
+                    <path id="path-K8-K9" d="M 2370 200 L 2400 200" />
+                    
+                    <!-- K9 do B5 -->
+                    <path id="path-K9-B5" d="M 2530 200 L 2650 200" />
+                    
+                    <!-- B5 (Nie) do Neg1 -->
+                    <path id="path-B5-Neg1" d="M 2690 160 L 2690 120 L 2730 120" />
+                    <!-- B5 (Tak) do Oczekiwanie -->
+                    <path id="path-B5-Oczekiwanie" d="M 2730 200 L 2770 200" />
+                    
+                    <!-- Oczekiwanie do B6 -->
+                    <path id="path-Oczekiwanie-B6" d="M 2900 200 L 2940 200" />
+                    
+                    <!-- B6 (Tak) do Poz1 -->
+                    <path id="path-B6-Poz1" d="M 2980 160 L 2980 120 L 3020 120" />
+                    <!-- B6 (Nie) do K10 -->
+                    <path id="path-B6-K10" d="M 2980 240 L 2980 280 L 3020 280" />
+                    
+                    <!-- K10 do Neg2 -->
+                    <path id="path-K10-Neg2" d="M 3150 280 L 3190 280" />
+                </g>
+
+                <!-- Połączenia do silnika rekomendacji AI (Widoczne tylko w TO-BE) -->
+                <g id="ai-connections" fill="none" stroke="#10b981" stroke-width="1.5" stroke-dasharray="5,5" opacity="0" class="transition-all-svg">
+                    <path d="M 1250 540 L 255 235" /> <!-- Do K1 -->
+                    <path d="M 1250 540 L 475 355" /> <!-- Do KSpec -->
+                    <path d="M 1250 540 L 655 235" /> <!-- Do K2 -->
+                    <path d="M 1250 540 L 1205 355" /> <!-- Do K5 (Rekomendacja) -->
+                    <path d="M 1250 540 L 1915 235" /> <!-- Do K6 (Wycena) -->
+                    <path d="M 1250 540 L 2305 235" /> <!-- Do K8 (Generowanie) -->
+                    <path d="M 1250 540 L 3085 315" /> <!-- Do K10 (Follow-up) -->
+                </g>
+
+                <!-- Wejście A -->
+                <g id="node-InA" class="cursor-pointer" onclick="selectNode('InA')">
+                    <rect x="20" y="115" width="120" height="70" rx="8" fill="#1e293b" stroke="#00acc1" stroke-width="2" class="transition-all-svg" />
+                    <text x="32" y="145" fill="#e2e8f0" font-size="11" font-weight="600">✉️ Zapytanie E-mail</text>
+                    <text x="32" y="165" fill="#00acc1" font-size="10">Zapytanie klienta</text>
+                </g>
+
+                <!-- Wejście B -->
+                <g id="node-InB" class="cursor-pointer" onclick="selectNode('InB')">
+                    <rect x="20" y="215" width="120" height="70" rx="8" fill="#1e293b" stroke="#00acc1" stroke-width="2" class="transition-all-svg" />
+                    <text x="32" y="245" fill="#e2e8f0" font-size="11" font-weight="600">📞 Telefon klienta</text>
+                    <text x="32" y="265" fill="#00acc1" font-size="10">Zapytanie klienta</text>
+                </g>
+
+                <!-- Krok 1 -->
+                <g id="node-K1" class="cursor-pointer" onclick="selectNode('K1')">
+                    <rect x="190" y="165" width="130" height="70" rx="8" fill="#b45309" stroke="#f59e0b" stroke-width="2" fill-opacity="0.3" class="transition-all-svg" />
+                    <text id="txt-K1-t1" x="202" y="190" fill="#fef08a" font-size="10" font-weight="bold" class="transition-all-svg">Krok 1</text>
+                    <text id="txt-K1-t2" x="202" y="208" fill="#e2e8f0" font-size="11" font-weight="600" class="transition-all-svg">Odbiór zapytania i</text>
+                    <text id="txt-K1-t3" x="202" y="223" fill="#e2e8f0" font-size="11" font-weight="600" class="transition-all-svg">analiza wstępna</text>
+                </g>
+
+                <!-- Bramka Decyzyjna 1 -->
+                <g id="node-B1" class="cursor-pointer" onclick="selectNode('B1')">
+                    <polygon points="390,160 430,200 390,240 350,200" fill="#78350f" stroke="#ea580c" stroke-width="2" fill-opacity="0.5" class="transition-all-svg" />
+                    <text x="367" y="195" fill="#fdba74" font-size="10" font-weight="bold">Bramka 1</text>
+                    <text x="362" y="208" fill="#fff" font-size="9" font-weight="600">Czy dane</text>
+                    <text x="360" y="218" fill="#fff" font-size="9" font-weight="600">kompletne?</text>
+                    
+                    <text x="395" y="260" fill="#f87171" font-size="10" font-weight="bold">NIE</text>
+                    <text x="445" y="190" fill="#34d399" font-size="10" font-weight="bold">TAK</text>
+                </g>
+
+                <!-- Krok Specjalny -->
+                <g id="node-KSpec" class="cursor-pointer bottleneck-pulse transition-all-svg" onclick="selectNode('KSpec')">
+                    <rect x="410" y="285" width="130" height="70" rx="8" fill="#991b1b" stroke="#ef4444" stroke-width="2" fill-opacity="0.4" class="transition-all-svg" />
+                    <text id="txt-KSpec-t1" x="422" y="310" fill="#fca5a5" font-size="10" font-weight="bold" class="transition-all-svg">Krok Specjalny 🔴</text>
+                    <text id="txt-KSpec-t2" x="422" y="325" fill="#e2e8f0" font-size="11" font-weight="600" class="transition-all-svg">Przeszukiwanie bazy</text>
+                    <text id="txt-KSpec-t3" x="422" y="340" fill="#e2e8f0" font-size="11" font-weight="600" class="transition-all-svg">historii zamówień</text>
+                </g>
+
+                <!-- Krok 2 -->
+                <g id="node-K2" class="cursor-pointer bottleneck-pulse transition-all-svg" onclick="selectNode('K2')">
+                    <rect x="590" y="165" width="130" height="70" rx="8" fill="#991b1b" stroke="#ef4444" stroke-width="2" fill-opacity="0.4" class="transition-all-svg" />
+                    <text id="txt-K2-t1" x="602" y="190" fill="#fca5a5" font-size="10" font-weight="bold" class="transition-all-svg">Krok 2 🔴</text>
+                    <text id="txt-K2-t2" x="602" y="205" fill="#e2e8f0" font-size="11" font-weight="600" class="transition-all-svg">Przeszukanie</text>
+                    <text id="txt-K2-t3" x="602" y="220" fill="#e2e8f0" font-size="11" font-weight="600" class="transition-all-svg">1.8 mln indeksów</text>
+                </g>
+
+                <!-- Krok 3 -->
+                <g id="node-K3" class="cursor-pointer bottleneck-pulse transition-all-svg" onclick="selectNode('K3')">
+                    <rect x="750" y="165" width="130" height="70" rx="8" fill="#991b1b" stroke="#ef4444" stroke-width="2" fill-opacity="0.4" class="transition-all-svg" />
+                    <text id="txt-K3-t1" x="762" y="190" fill="#fca5a5" font-size="10" font-weight="bold" class="transition-all-svg">Krok 3 🔴</text>
+                    <text id="txt-K3-t2" x="762" y="205" fill="#e2e8f0" font-size="11" font-weight="600" class="transition-all-svg">Logowanie i</text>
+                    <text id="txt-K3-t3" x="762" y="220" fill="#e2e8f0" font-size="11" font-weight="600" class="transition-all-svg">weryfikacja ERP</text>
+                </g>
+
+                <!-- Krok 4 -->
+                <g id="node-K4" class="cursor-pointer bottleneck-pulse transition-all-svg" onclick="selectNode('K4')">
+                    <rect x="910" y="165" width="130" height="70" rx="8" fill="#991b1b" stroke="#ef4444" stroke-width="2" fill-opacity="0.4" class="transition-all-svg" />
+                    <text id="txt-K4-t1" x="922" y="190" fill="#fca5a5" font-size="10" font-weight="bold" class="transition-all-svg">Krok 4 🔴</text>
+                    <text id="txt-K4-t2" x="922" y="205" fill="#e2e8f0" font-size="11" font-weight="600" class="transition-all-svg">Przeszukiwanie baz</text>
+                    <text id="txt-K4-t3" x="922" y="220" fill="#e2e8f0" font-size="11" font-weight="600" class="transition-all-svg">dostawców zewn.</text>
+                </g>
+
+                <!-- Bramka Decyzyjna 2 -->
+                <g id="node-B2" class="cursor-pointer" onclick="selectNode('B2')">
+                    <polygon points="1110,160 1150,200 1110,240 1070,200" fill="#78350f" stroke="#ea580c" stroke-width="2" fill-opacity="0.5" class="transition-all-svg" />
+                    <text x="1087" y="195" fill="#fdba74" font-size="10" font-weight="bold">Bramka 2</text>
+                    <text x="1085" y="208" fill="#fff" font-size="9" font-weight="600">Potrzebny</text>
+                    <text x="1083" y="218" fill="#fff" font-size="9" font-weight="600">zamiennik?</text>
+                    
+                    <text x="1115" y="260" fill="#f87171" font-size="10" font-weight="bold">TAK</text>
+                    <text x="1165" y="190" fill="#34d399" font-size="10" font-weight="bold">NIE</text>
+                </g>
+
+                <!-- Krok 5 -->
+                <g id="node-K5" class="cursor-pointer bottleneck-pulse transition-all-svg" onclick="selectNode('K5')">
+                    <rect x="1140" y="285" width="130" height="70" rx="8" fill="#991b1b" stroke="#ef4444" stroke-width="2" fill-opacity="0.4" class="transition-all-svg" />
+                    <text id="txt-K5-t1" x="1152" y="310" fill="#fca5a5" font-size="10" font-weight="bold" class="transition-all-svg">Krok 5 🔴</text>
+                    <text id="txt-K5-t2" x="1152" y="325" fill="#e2e8f0" font-size="11" font-weight="600" class="transition-all-svg">Dobór intuicyjny</text>
+                    <text id="txt-K5-t3" x="1152" y="340" fill="#e2e8f0" font-size="11" font-weight="600" class="transition-all-svg">("z głowy")</text>
+                </g>
+
+                <!-- Bramka Decyzyjna 3 -->
+                <g id="node-B3" class="cursor-pointer" onclick="selectNode('B3')">
+                    <polygon points="1350,280 1390,320 1350,360 1310,320" fill="#78350f" stroke="#ea580c" stroke-width="2" fill-opacity="0.5" class="transition-all-svg" />
+                    <text id="txt-B3-t1" x="1327" y="315" fill="#fdba74" font-size="10" font-weight="bold">Bramka 3</text>
+                    <text id="txt-B3-t2" x="1325" y="328" fill="#fff" font-size="9" font-weight="600">Handlowiec</text>
+                    <text id="txt-B3-t3" x="1324" y="338" fill="#fff" font-size="9" font-weight="600">Senior?</text>
+                    
+                    <text id="txt-B3-yes" x="1355" y="260" fill="#34d399" font-size="10" font-weight="bold">TAK</text>
+                    <text id="txt-B3-no" x="1355" y="380" fill="#f87171" font-size="10" font-weight="bold">NIE</text>
+                </g>
+
+                <!-- K5_Tak -->
+                <g id="node-K5_Tak" class="cursor-pointer" onclick="selectNode('K5_Tak')">
+                    <rect x="1390" y="205" width="130" height="70" rx="8" fill="#b45309" stroke="#f59e0b" stroke-width="2" fill-opacity="0.3" class="transition-all-svg" />
+                    <text id="txt-K5_Tak-t1" x="1402" y="230" fill="#fef08a" font-size="10" font-weight="bold" class="transition-all-svg">Sukces Doboru</text>
+                    <text id="txt-K5_Tak-t2" x="1402" y="245" fill="#e2e8f0" font-size="11" font-weight="600" class="transition-all-svg">Bezawaryjny</text>
+                    <text id="txt-K5_Tak-t3" x="1402" y="260" fill="#e2e8f0" font-size="11" font-weight="600" class="transition-all-svg">właściwy produkt</text>
+                </g>
+
+                <!-- K5_Nie -->
+                <g id="node-K5_Nie" class="cursor-pointer bottleneck-pulse transition-all-svg" onclick="selectNode('K5_Nie')">
+                    <rect x="1390" y="365" width="130" height="70" rx="8" fill="#991b1b" stroke="#ef4444" stroke-width="2" fill-opacity="0.4" class="transition-all-svg" />
+                    <text id="txt-K5_Nie-t1" x="1402" y="390" fill="#fca5a5" font-size="10" font-weight="bold" class="transition-all-svg">Błąd Doboru 🔴</text>
+                    <text id="txt-K5_Nie-t2" x="1402" y="405" fill="#e2e8f0" font-size="11" font-weight="600" class="transition-all-svg">Ryzyko pomyłki</text>
+                    <text id="txt-K5_Nie-t3" x="1402" y="420" fill="#e2e8f0" font-size="11" font-weight="600" class="transition-all-svg">i zwrotu części</text>
+                </g>
+
+                <!-- Krok 6 -->
+                <g id="node-K6" class="cursor-pointer bottleneck-pulse transition-all-svg" onclick="selectNode('K6')">
+                    <rect x="1850" y="165" width="130" height="70" rx="8" fill="#991b1b" stroke="#ef4444" stroke-width="2" fill-opacity="0.4" class="transition-all-svg" />
+                    <text id="txt-K6-t1" x="1862" y="190" fill="#fca5a5" font-size="10" font-weight="bold" class="transition-all-svg">Krok 6 🔴</text>
+                    <text id="txt-K6-t2" x="1862" y="205" fill="#e2e8f0" font-size="11" font-weight="600" class="transition-all-svg">Wycena manualna</text>
+                    <text id="txt-K6-t3" x="1862" y="220" fill="#e2e8f0" font-size="11" font-weight="600" class="transition-all-svg">pod presją czasu</text>
+                </g>
+
+                <!-- Bramka Decyzyjna 4 -->
+                <g id="node-B4" class="cursor-pointer" onclick="selectNode('B4')">
+                    <polygon points="2050,160 2090,200 2050,240 2010,200" fill="#78350f" stroke="#ea580c" stroke-width="2" fill-opacity="0.5" class="transition-all-svg" />
+                    <text id="txt-B4-t1" x="2027" y="195" fill="#fdba74" font-size="10" font-weight="bold">Bramka 4</text>
+                    <text id="txt-B4-t2" x="2025" y="208" fill="#fff" font-size="9" font-weight="600">Czy system</text>
+                    <text id="txt-B4-t3" x="2022" y="218" fill="#fff" font-size="9" font-weight="600">blokuje marżę?</text>
+                    
+                    <text id="txt-B4-yes" x="2055" y="260" fill="#f87171" font-size="10" font-weight="bold">NIE</text>
+                    <text id="txt-B4-no" x="2105" y="190" fill="#34d399" font-size="10" font-weight="bold">TAK</text>
+                </g>
+
+                <!-- Krok 7 -->
+                <g id="node-K7" class="cursor-pointer bottleneck-pulse transition-all-svg" onclick="selectNode('K7')">
+                    <rect x="2080" y="285" width="130" height="70" rx="8" fill="#991b1b" stroke="#ef4444" stroke-width="2" fill-opacity="0.4" class="transition-all-svg" />
+                    <text id="txt-K7-t1" x="2092" y="310" fill="#fca5a5" font-size="10" font-weight="bold" class="transition-all-svg">Krok 7 🔴</text>
+                    <text id="txt-K7-t2" x="2092" y="325" fill="#e2e8f0" font-size="11" font-weight="600" class="transition-all-svg">Zawyżony rabat</text>
+                    <text id="txt-K7-t3" x="2092" y="340" fill="#e2e8f0" font-size="11" font-weight="600" class="transition-all-svg">"dla spokoju"</text>
+                </g>
+
+                <!-- Krok 8 -->
+                <g id="node-K8" class="cursor-pointer" onclick="selectNode('K8')">
+                    <rect x="2240" y="165" width="130" height="70" rx="8" fill="#b45309" stroke="#f59e0b" stroke-width="2" fill-opacity="0.3" class="transition-all-svg" />
+                    <text id="txt-K8-t1" x="2252" y="190" fill="#fef08a" font-size="10" font-weight="bold" class="transition-all-svg">Krok 8</text>
+                    <text id="txt-K8-t2" x="2252" y="205" fill="#e2e8f0" font-size="11" font-weight="600" class="transition-all-svg">Generowanie</text>
+                    <text id="txt-K8-t3" x="2252" y="220" fill="#e2e8f0" font-size="11" font-weight="600" class="transition-all-svg">zestawienia cen</text>
+                </g>
+
+                <!-- Krok 9 -->
+                <g id="node-K9" class="cursor-pointer" onclick="selectNode('K9')">
+                    <rect x="2400" y="165" width="130" height="70" rx="8" fill="#b45309" stroke="#f59e0b" stroke-width="2" fill-opacity="0.3" class="transition-all-svg" />
+                    <text id="txt-K9-t1" x="2412" y="190" fill="#fef08a" font-size="10" font-weight="bold" class="transition-all-svg">Krok 9</text>
+                    <text id="txt-K9-t2" x="2412" y="205" fill="#e2e8f0" font-size="11" font-weight="600" class="transition-all-svg">Wysłanie oferty</text>
+                    <text id="txt-K9-t3" x="2412" y="220" fill="#e2e8f0" font-size="11" font-weight="600" class="transition-all-svg">do klienta e-mail</text>
+                </g>
+
+                <!-- Bramka Decyzyjna 5 -->
+                <g id="node-B5" class="cursor-pointer" onclick="selectNode('B5')">
+                    <polygon points="2690,160 2730,200 2690,240 2650,200" fill="#78350f" stroke="#ea580c" stroke-width="2" fill-opacity="0.5" class="transition-all-svg" />
+                    <text x="2667" y="195" fill="#fdba74" font-size="10" font-weight="bold">Bramka 5</text>
+                    <text x="2663" y="208" fill="#fff" font-size="9" font-weight="600">Czas reakcji</text>
+                    <text x="2661" y="218" fill="#fff" font-size="9" font-weight="600">OK dla klienta?</text>
+                    
+                    <text x="2695" y="150" fill="#f87171" font-size="10" font-weight="bold">NIE</text>
+                    <text x="2745" y="190" fill="#34d399" font-size="10" font-weight="bold">TAK</text>
+                </g>
+
+                <!-- Negatywny Wynik 1 -->
+                <g id="node-Neg1" class="cursor-pointer bottleneck-pulse transition-all-svg" onclick="selectNode('Neg1')">
+                    <rect x="2730" y="85" width="140" height="70" rx="8" fill="#7f1d1d" stroke="#ef4444" stroke-width="2" fill-opacity="0.8" class="transition-all-svg" />
+                    <text id="txt-Neg1-t1" x="2742" y="110" fill="#fecaca" font-size="10" font-weight="bold" class="transition-all-svg">Zakup u konkurencji 🔴</text>
+                    <text id="txt-Neg1-t2" x="2742" y="125" fill="#fca5a5" font-size="11" font-weight="600" class="transition-all-svg">Zbyt długi czas</text>
+                    <text id="txt-Neg1-t3" x="2742" y="140" fill="#fca5a5" font-size="11" font-weight="600" class="transition-all-svg">wyceny (do 2 dni)</text>
+                </g>
+
+                <!-- Oczekiwanie -->
+                <g id="node-Oczekiwanie" class="cursor-pointer" onclick="selectNode('Oczekiwanie')">
+                    <rect x="2770" y="165" width="130" height="70" rx="8" fill="#1e293b" stroke="#94a3b8" stroke-width="2" class="transition-all-svg" />
+                    <text id="txt-Oczekiwanie-t1" x="2782" y="195" fill="#e2e8f0" font-size="10" font-weight="bold" class="transition-all-svg">Status</text>
+                    <text id="txt-Oczekiwanie-t2" x="2782" y="210" fill="#e2e8f0" font-size="11" font-weight="600" class="transition-all-svg">Oczekiwanie na</text>
+                    <text id="txt-Oczekiwanie-t3" x="2782" y="225" fill="#e2e8f0" font-size="11" font-weight="600" class="transition-all-svg">decyzję klienta</text>
+                </g>
+
+                <!-- Bramka Decyzyjna 6 -->
+                <g id="node-B6" class="cursor-pointer" onclick="selectNode('B6')">
+                    <polygon points="2980,160 3020,200 2980,240 2940,200" fill="#78350f" stroke="#ea580c" stroke-width="2" fill-opacity="0.5" class="transition-all-svg" />
+                    <text x="2957" y="195" fill="#fdba74" font-size="10" font-weight="bold">Bramka 6</text>
+                    <text x="2953" y="208" fill="#fff" font-size="9" font-weight="600">Klient dzwoni</text>
+                    <text x="2951" y="218" fill="#fff" font-size="9" font-weight="600">potwierdzić?</text>
+                    
+                    <text x="2985" y="150" fill="#34d399" font-size="10" font-weight="bold">TAK</text>
+                    <text x="2985" y="260" fill="#f87171" font-size="10" font-weight="bold">NIE</text>
+                </g>
+
+                <!-- Poz1 - Sukces -->
+                <g id="node-Poz1" class="cursor-pointer" onclick="selectNode('Poz1')">
+                    <rect x="3020" y="85" width="130" height="70" rx="8" fill="#064e3b" stroke="#10b981" stroke-width="2" fill-opacity="0.8" class="transition-all-svg" />
+                    <text id="txt-Poz1-t1" x="3032" y="110" fill="#d1fae5" font-size="10" font-weight="bold" class="transition-all-svg">Wygrana 🟢</text>
+                    <text id="txt-Poz1-t2" x="3032" y="125" fill="#34d399" font-size="11" font-weight="700" class="transition-all-svg">Realizacja</text>
+                    <text id="txt-Poz1-t3" x="3032" y="140" fill="#34d399" font-size="11" font-weight="700" class="transition-all-svg">zamówienia!</text>
+                </g>
+
+                <!-- Krok 10 -->
+                <g id="node-K10" class="cursor-pointer bottleneck-pulse transition-all-svg" onclick="selectNode('K10')">
+                    <rect x="3020" y="245" width="130" height="70" rx="8" fill="#991b1b" stroke="#ef4444" stroke-width="2" fill-opacity="0.4" class="transition-all-svg" />
+                    <text id="txt-K10-t1" x="3032" y="270" fill="#fca5a5" font-size="10" font-weight="bold" class="transition-all-svg">Krok 10 🔴</text>
+                    <text id="txt-K10-t2" x="3032" y="285" fill="#e2e8f0" font-size="11" font-weight="600" class="transition-all-svg">Brak aktywnego</text>
+                    <text id="txt-K10-t3" x="3032" y="300" fill="#e2e8f0" font-size="11" font-weight="600" class="transition-all-svg">follow-up'u</text>
+                </g>
+
+                <!-- Negatywny Wynik 2 -->
+                <g id="node-Neg2" class="cursor-pointer bottleneck-pulse transition-all-svg" onclick="selectNode('Neg2')">
+                    <rect x="3190" y="245" width="130" height="70" rx="8" fill="#7f1d1d" stroke="#ef4444" stroke-width="2" fill-opacity="0.8" class="transition-all-svg" />
+                    <text id="txt-Neg2-t1" x="3202" y="270" fill="#fecaca" font-size="10" font-weight="bold" class="transition-all-svg">Utrata Klienta 🔴</text>
+                    <text id="txt-Neg2-t2" x="3202" y="285" fill="#fca5a5" font-size="11" font-weight="600" class="transition-all-svg">Porzucenie oferty</text>
+                    <text id="txt-Neg2-t3" x="3202" y="300" fill="#fca5a5" font-size="11" font-weight="600" class="transition-all-svg">bez rozstrzygnięcia</text>
+                </g>
+
+                <!-- Blok bazy danych silnika rekomendacji AI (styl Proces_3 - Widoczny tylko w TO-BE) -->
+                <g id="node-ai-db" opacity="0" class="transition-all-svg database-glow cursor-pointer" transform="translate(1250, 480)" onclick="selectAIDatabase()">
+                    <!-- Renderowanie cylindra bazy danych -->
+                    <ellipse cx="60" cy="20" rx="60" ry="20" fill="#064e3b" stroke="#10b981" stroke-width="2" />
+                    <path d="M 0 20 L 0 80 A 60 20 0 0 0 120 80 L 120 20 Z" fill="#064e3b" stroke="#10b981" stroke-width="2" />
+                    <ellipse cx="60" cy="40" rx="60" ry="20" fill="none" stroke="#10b981" stroke-width="1" stroke-dasharray="3,3" />
+                    <ellipse cx="60" cy="60" rx="60" ry="20" fill="none" stroke="#10b981" stroke-width="1" stroke-dasharray="3,3" />
+                    <ellipse cx="60" cy="80" rx="60" ry="20" fill="#022c22" stroke="#10b981" stroke-width="2" />
+                    <!-- Tekst centralny w bazie danych -->
+                    <text x="60" y="48" fill="#a7f3d0" font-size="11" font-weight="700" text-anchor="middle">SILNIK AI</text>
+                    <text x="60" y="62" fill="#34d399" font-size="9" font-weight="500" text-anchor="middle">Centralna Wiedza</text>
+                </g>
+            </svg>
+        </div>
+
+        <aside class="w-96 bg-slate-950 border-l border-slate-800 p-6 overflow-y-auto flex flex-col justify-between shrink-0 z-10" id="detailPanel">
+            <div id="welcomeDetail" class="text-center py-12">
+                <div class="w-16 h-16 bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-500">
+                    <i class="fa-solid fa-circle-info text-2xl"></i>
+                </div>
+                <h3 class="text-md font-semibold text-slate-300">Szczegóły kroku</h3>
+                <p class="text-xs text-slate-500 mt-2 px-4 leading-relaxed">Kliknij dowolny blok procesu na interaktywnej mapie po lewej, aby zobaczyć jego charakterystykę, zidentyfikowane ryzyka oraz propozycję automatyzacji TO-BE.</p>
+                
+                <div class="mt-8 border-t border-slate-800 pt-6">
+                    <h4 class="text-xs font-semibold uppercase text-slate-400 text-left mb-3 tracking-wider">Metryki procesu AS-IS</h4>
+                    <div class="grid grid-cols-2 gap-3 text-left">
+                        <div class="bg-slate-900 p-3 rounded-lg border border-slate-800">
+                            <span class="text-[10px] text-slate-500 block">Szybkość</span>
+                            <span class="text-sm font-bold text-red-400">2 godz. - 2 dni</span>
+                        </div>
+                        <div class="bg-slate-900 p-3 rounded-lg border border-slate-800">
+                            <span class="text-[10px] text-slate-500 block">Konwersja</span>
+                            <span class="text-sm font-bold text-red-400">ok. 24%</span>
+                        </div>
+                        <div class="bg-slate-900 p-3 rounded-lg border border-slate-800 col-span-2">
+                            <span class="text-[10px] text-slate-500 block">Ryzyko erozji marży</span>
+                            <span class="text-xs font-semibold text-red-400"><i class="fa-solid fa-triangle-exclamation mr-1"></i> Krytyczne (oddawanie marży)</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Ukryty panel wypełniany dynamicznie przy kliknięciu -->
+            <div id="activeDetail" class="hidden flex-1 flex flex-col h-full justify-between">
+                <div>
+                    <!-- Nagłówek i status elementu -->
+                    <div class="flex items-start justify-between mb-4">
+                        <span id="nodePhase" class="text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 bg-slate-800 text-slate-400 rounded-full"></span>
+                        <span id="nodeStatusBadge" class="text-[10px] font-bold uppercase px-2 py-1 rounded"></span>
+                    </div>
+
+                    <h2 id="nodeTitle" class="text-xl font-bold text-white mb-2"></h2>
+                    <p id="nodeDesc" class="text-xs text-slate-300 leading-relaxed mb-6"></p>
+
+                    <!-- Typ działania w widoku TO-BE -->
+                    <div id="toBeTypeBox" class="p-3 rounded-xl mb-4 hidden">
+                        <span class="text-[10px] font-bold uppercase tracking-wider block mb-1">Typ działania w modelu przyszłym (TO-BE):</span>
+                        <div class="flex items-center gap-2">
+                            <span id="toBeTypeIcon" class="text-sm"></span>
+                            <span id="toBeTypeText" class="text-xs font-semibold"></span>
+                        </div>
+                    </div>
+
+                    <!-- Analiza Muda / Straty -->
+                    <div id="mudaBox" class="bg-red-500/10 border border-red-500/30 p-4 rounded-xl mb-6">
+                        <h4 class="text-xs font-bold text-red-400 uppercase tracking-wide flex items-center gap-1.5 mb-2">
+                            <i class="fa-solid fa-triangle-exclamation"></i> Marnotrawstwo (Muda) & Straty
+                        </h4>
+                        <p id="nodeMuda" class="text-xs text-slate-200 leading-relaxed"></p>
+                    </div>
+
+                    <!-- Wizja Przyszłości TO-BE -->
+                    <div id="recommendationBox" class="bg-emerald-500/10 border border-emerald-500/30 p-4 rounded-xl">
+                        <h4 class="text-xs font-bold text-emerald-400 uppercase tracking-wide flex items-center gap-1.5 mb-2">
+                            <i class="fa-solid fa-wand-magic-sparkles"></i> Rekomendacja TO-BE (Wzór Proces_3)
+                        </h4>
+                        <p id="nodeToBe" class="text-xs text-slate-200 leading-relaxed"></p>
+                    </div>
+                </div>
+
+                <!-- Footer panelu z przyciskami do przełączania kolejnych kroków -->
+                <div class="mt-8 border-t border-slate-800 pt-4 flex justify-between gap-2">
+                    <button id="prevStepBtn" class="flex-1 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-lg transition">
+                        <i class="fa-solid fa-chevron-left mr-1"></i> Poprzedni
+                    </button>
+                    <button id="nextStepBtn" class="flex-1 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-lg transition">
+                        Następny <i class="fa-solid fa-chevron-right ml-1"></i>
+                    </button>
+                </div>
+            </div>
+        </aside>
+    </main>
+
+    <!-- Modal Symulacji / Gry Walidacji Scenariusza -->
+    <div id="walkthroughModal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center hidden">
+        <div class="bg-slate-900 border border-slate-800 max-w-xl w-full p-6 rounded-2xl shadow-2xl relative">
+            <button onclick="closeWalkthrough()" class="absolute top-4 right-4 text-slate-400 hover:text-white transition">
+                <i class="fa-solid fa-xmark text-lg"></i>
+            </button>
+            
+            <h3 class="text-lg font-bold text-white mb-2 flex items-center gap-2">
+                <i class="fa-solid fa-route text-blue-500"></i> Symulacja: Ścieżka "Klocki do Passata 2016"
+            </h3>
+            <p class="text-xs text-slate-400 mb-4">Przejdź przez ścieżkę zamówienia i porównaj starą, manualną pracę handlowca z fioletowymi automatyzacjami AI.</p>
+
+            <!-- Krok Symulacji -->
+            <div class="grid grid-cols-2 gap-4 mb-4">
+                <div class="bg-amber-950/30 p-4 rounded-xl border border-amber-500/20">
+                    <h4 class="text-xs font-bold text-amber-400 uppercase tracking-wider mb-1"><i class="fa-solid fa-user mr-1"></i> Stan AS-IS (Stary)</h4>
+                    <p id="simTextAsIs" class="text-xs text-slate-300 leading-relaxed"></p>
+                </div>
+                <div class="bg-purple-950/30 p-4 rounded-xl border border-purple-500/20">
+                    <h4 class="text-xs font-bold text-purple-300 uppercase tracking-wider mb-1"><i class="fa-solid fa-robot mr-1"></i> Stan TO-BE (Proces_3)</h4>
+                    <p id="simTextToBe" class="text-xs text-slate-300 leading-relaxed"></p>
+                </div>
+            </div>
+
+            <!-- Postęp -->
+            <div class="flex items-center justify-between mb-4">
+                <span class="text-xs text-slate-500 font-mono">Faza: <span id="simPhase">I/IV</span></span>
+                <div class="w-2/3 bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                    <div id="simProgressBar" class="bg-blue-600 h-full w-[10%] transition-all duration-300"></div>
+                </div>
+            </div>
+
+            <div class="flex gap-3 mt-6">
+                <button onclick="prevSimStep()" id="simPrevBtn" class="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 font-semibold rounded-lg transition disabled:opacity-50" disabled>
+                    Cofnij
+                </button>
+                <button onclick="nextSimStep()" id="simNextBtn" class="flex-1 py-2.5 bg-blue-600 hover:bg-blue-500 text-xs text-white font-semibold rounded-lg transition">
+                    Rozpocznij
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Dane techniczne wszystkich węzłów procesu w trybach AS-IS i TO-BE
+        const processNodes = {
+            'InA': {
+                id: 'InA',
+                title: 'Zapytanie E-mail',
+                phase: 'FAZA I',
+                status: 'wejście',
+                desc: 'Klient wysyła e-mail z prośbą o wycenę np. "Potrzebuję klocków do Passata z 2016". Brak wymaganej struktury danych powoduje chaos w skrzynce i wymusza ręczną selekcję zgłoszeń.',
+                toBe: 'E-mail wpada do inteligentnej skrzynki odbiorczej CRM, gdzie wbudowany model LLM automatycznie parsuje treść i kategoryzuje zapytanie.',
+                muda: 'Muda brakującego standardu danych wejściowych i niepotrzebna selekcja.',
+                isBottleneck: false,
+                toBeType: 'automatyzacja'
+            },
+            'InB': {
+                id: 'InB',
+                title: 'Telefon klienta',
+                phase: 'FAZA I',
+                status: 'wejście',
+                desc: 'Klient dzwoni z prośbą o wycenę części, często przekazując niespójne wiadomości. Handlowiec na gorąco notuje dane na kartce lub próbuje wklepywać je do bazy.',
+                toBe: 'Integracja centrali VoIP z transkrypcją Speech-to-Text AI. Algorytm w czasie rzeczywistym identyfikuje klienta i jego historię pojazdów.',
+                muda: 'Muda przerw w pracy, chaos informacyjny i błędy w notatkach ręcznych.',
+                isBottleneck: false,
+                toBeType: 'automatyzacja'
+            },
+            'K1': {
+                id: 'K1',
+                title: 'Odbiór zapytania i analiza wstępna',
+                phase: 'FAZA I',
+                status: 'zadanie',
+                desc: 'Handlowiec analizuje treść wiadomości lub transkrybuje telefon i określa stopień kompletności parametrów technicznych części. W tym momencie ręcznie sprawdza opisy.',
+                toBe: 'Automatyczna rejestracja zapytania i walidacja kompletności przez AI. Handlowiec nie musi czytać maila ani ręcznie zakładać sprawy w systemie.',
+                muda: 'Strata czasu na mechaniczną analizę wstępną i kategoryzację wiadomości.',
+                isBottleneck: false,
+                toBeType: 'automatyzacja'
+            },
+            'B1': {
+                id: 'B1',
+                title: 'Bramka 1: Czy dane są kompletne?',
+                phase: 'FAZA I',
+                status: 'decyzja',
+                desc: 'Bramka decyzyjna weryfikująca, czy klient podał kompletne dane części. W przypadku braku wymaganych informacji, handlowiec musi rozpocząć czasochłonne badanie historii klienta.',
+                toBe: 'Systemowa automatyczna weryfikacja poprawności danych technicznych na bazie modelu AI i dopasowań CEPiK przed podjęciem decyzji o kolejnym kroku.',
+                isBottleneck: false,
+                toBeType: 'automatyzacja'
+            },
+            'KSpec': {
+                id: 'KSpec',
+                title: 'Ręczne przeszukiwanie historii zamówień',
+                phase: 'FAZA I',
+                status: 'wąskie gardło',
+                desc: 'Gdy dane są niepełne (klient chce "to co ostatnio"), handlowiec manualnie otwiera setki starych faktur i zamówień, tracąc cenne minuty w poszukiwaniu właściwego pojazdu.',
+                toBe: 'Automatyczne i natychmiastowe pobranie historii zakupów i dopasowanie VIN klienta przez system zintegrowany z bazą CEPiK w ułamku sekundy.',
+                muda: 'Muda zbędnego przetwarzania i wyszukiwania (analiza detektywistyczna handlowca).',
+                isBottleneck: true,
+                toBeType: 'automatyzacja'
+            },
+            'K2': {
+                id: 'K2',
+                title: 'Ręczne przeszukiwanie 1.8 mln indeksów katalogu',
+                phase: 'FAZA II',
+                status: 'wąskie gardło',
+                desc: 'Handlowiec ręcznie wpisuje słowa kluczowe w gigantycznym katalogu liczącym 1.8 miliona rekordów. Często brakuje wyszukiwania rozmytego (fuzzy search), co zmusza do wielokrotnego poprawiania wpisów.',
+                toBe: 'Szybkie wyszukiwanie i automatyczne kojarzenie indeksów za pomocą inteligentnego algorytmu Elasticsearch (fuzzy matching z tolerancją na literówki).',
+                muda: 'Muda straconego czasu na mechaniczne dopasowywanie wpisów słownych.',
+                isBottleneck: true,
+                toBeType: 'automatyzacja'
+            },
+            'K3': {
+                id: 'K3',
+                title: 'Logowanie i weryfikacja w ERP',
+                phase: 'FAZA II',
+                status: 'wąskie gardło',
+                desc: 'Po znalezieniu indeksu, handlowiec musi przełączyć aplikację na system ERP, zalogować się, wyszukać dany kod i sprawdzić stany magazynowe w konkretnym oddziale.',
+                toBe: 'Błyskawiczna autoweryfikacja stanów magazynowych w systemie ERP, połączona bezpośrednio z wynikami inteligentnego wyszukiwania w jednym widoku.',
+                muda: 'Zbędny ruch (Muda) - ciągłe przełączanie się i logowanie do oddzielnych aplikacji.',
+                isBottleneck: true,
+                toBeType: 'automatyzacja'
+            },
+            'K4': {
+                id: 'K4',
+                title: 'Przeszukiwanie zewnętrznych baz danych dostawców',
+                phase: 'FAZA II',
+                status: 'wąskie gardło',
+                desc: 'Jeśli produktu nie ma na stanie, handlowiec ręcznie loguje się do portali 5-10 zewnętrznych dystrybutorów, by sprawdzić dostępność i ceny. Trwa to od kilkunastu minut do 2 dni.',
+                toBe: 'Zautomatyzowane zapytania do baz dostawców zewnętrznych poprzez API. Integracja agreguje w 2 sekundy ceny i terminy dostaw wszystkich hurtowników.',
+                muda: 'Muda oczekiwania na zewnętrzne wyceny oraz logowanie manualne.',
+                isBottleneck: true,
+                toBeType: 'automatyzacja'
+            },
+            'B2': {
+                id: 'B2',
+                title: 'Bramka 2: Czy potrzebny jest zamiennik?',
+                phase: 'FAZA II',
+                status: 'decyzja',
+                desc: 'Weryfikacja, czy część oryginalna jest niedostępna lub zbyt droga i należy zaproponować alternatywne rozwiązanie (zamiennik o podobnych parametrach).',
+                toBe: 'Automatyczne określenie przez system czy opłaca się dobrać zamiennik, bazując na kryteriach marżowości i dostępności u kooperantów API.',
+                isBottleneck: false,
+                toBeType: 'automatyzacja'
+            },
+            'K5': {
+                id: 'K5',
+                title: 'Dobór intuicyjny ("z głowy" handlowca)',
+                phase: 'FAZA II',
+                status: 'wąskie gardło',
+                desc: 'Ponieważ system ERP i katalog nie posiadają bazy sprawdzonych zamienników o odpowiedniej jakości, dobór opiera się wyłącznie na prywatnej wiedzy i pamięci handlowca.',
+                toBe: 'Automatyczna rekomendacja najlepszych zamienników wygenerowana przez Silnik Wiedzy AI (cross-referencje oparte o rzeczywiste dane o awaryjności i zwrotach).',
+                muda: 'Muda intelektualna i ryzyko operacyjne (uzależnienie od kluczowego personelu).',
+                isBottleneck: true,
+                toBeType: 'automatyzacja'
+            },
+            'B3': {
+                id: 'B3',
+                title: 'Bramka 3: Czy handlowiec to Senior?',
+                phase: 'FAZA II',
+                status: 'decyzja',
+                desc: 'Podział na doświadczonych handlowców (którzy rzadko się mylą) oraz młodszych pracowników, którzy muszą zgadywać lub ryzykować wybór losowej części.',
+                toBe: 'Bramka zostaje uproszczona. Każdy pracownik (nawet stażysta) korzysta z tego samego interfejsu z asystentem AI, eliminując lukę kompetencyjną.',
+                isBottleneck: false,
+                toBeType: 'automatyzacja'
+            },
+            'K5_Tak': {
+                id: 'K5_Tak',
+                title: 'Właściwy dobór bezawaryjnego zamiennika',
+                phase: 'FAZA II',
+                status: 'zadanie',
+                desc: 'Doświadczony handlowiec dobiera odpowiedni zamiennik. Proces jednak trwał długo i wymagał całkowitego skupienia ludzkiego.',
+                toBe: 'Weryfikacja ekspercka i ostateczny wybór przez handlowca. AI rekomenduje rozwiązanie, a człowiek jedynie zatwierdza je jednym kliknięciem (Praca Człowieka).',
+                muda: 'Marnowanie potencjału eksperta na powtarzalne dobieranie, zamiast prostej akceptacji.',
+                isBottleneck: false,
+                toBeType: 'praca_czlowieka'
+            },
+            'K5_Nie': {
+                id: 'K5_Nie',
+                title: 'Błąd w doborze części (Ryzyko reklamacji)',
+                phase: 'FAZA II',
+                status: 'wąskie gardło',
+                desc: 'Junior dobiera tańszy, ale awaryjny lub niedopasowany zamiennik. Skutkuje to frustracją klienta, zwrotem, kosztami logistyki i stratą reputacji.',
+                toBe: 'Automatyczna kontrola kompatybilności części przez wbudowany algorytm. System blokuje dodanie części o wysokiej stopie zwrotów dla danego VIN.',
+                muda: 'Koszty poprawek i defektów (zwroty, logistyka wsteczna).',
+                isBottleneck: true,
+                toBeType: 'automatyzacja'
+            },
+            'K6': {
+                id: 'K6',
+                title: 'Ręczna wycena pod presją czasu',
+                phase: 'FAZA III',
+                status: 'wąskie gardło',
+                desc: 'Handlowiec musi szybko wyliczyć cenę końcową. Standardy cenowe różnią się między oddziałami – klienci w różnych miastach dostają losowe i niespójne wyceny.',
+                toBe: 'Automatyczna kalkulacja optymalnej ceny końcowej i marży przez silnik Dynamic Pricing, bazujący na historii klienta i cenach konkurencji.',
+                muda: 'Niespójność procesowa (Mura) i błędy wyliczeń pod wpływem stresu.',
+                isBottleneck: true,
+                toBeType: 'automatyzacja'
+            },
+            'B4': {
+                id: 'B4',
+                title: 'Bramka 4: Czy system kontroluje marżę?',
+                phase: 'FAZA III',
+                status: 'decyzja',
+                desc: 'Weryfikacja, czy system ERP ostrzega przed sprzedażą poniżej minimalnej dopuszczalnej marży dla danej grupy produktowej.',
+                toBe: 'Automatyczna weryfikacja marżowości. Jeżeli marża jest bezpieczna, system od razu generuje dokument bez angażowania ludzi.',
+                isBottleneck: false,
+                toBeType: 'automatyzacja'
+            },
+            'K7': {
+                id: 'K7',
+                title: 'Maksymalny rabat "dla świętego spokoju"',
+                phase: 'FAZA III',
+                status: 'wąskie gardło',
+                desc: 'Handlowiec, chcąc szybko domknąć temat i zadowolić klienta, daje maksymalny dopuszczalny rabat (np. 35%). Drastycznie kurczy to marżę i zysk firmy.',
+                toBe: 'Weryfikacja i akceptacja niestandardowego rabatu przez Managera (wymagana autoryzacja człowieka przy przekroczeniu bezpiecznych progów AI).',
+                muda: 'Erozja marży i rozdawnictwo profitów firmy.',
+                isBottleneck: true,
+                toBeType: 'praca_czlowieka'
+            },
+            'K8': {
+                id: 'K8',
+                title: 'Generowanie zestawienia cenowego',
+                phase: 'FAZA III',
+                status: 'zadanie',
+                desc: 'Ręczne przepisywanie kodów towarów, cen katalogowych, rabatów i cen końcowych do programu pocztowego lub arkusza.',
+                toBe: 'Automatyczne wygenerowanie atrakcyjnej oferty PDF oraz interaktywnego linku do płatności online bezpośrednio z systemu.',
+                muda: 'Muda zbędnego przepisywania danych między aplikacjami.',
+                isBottleneck: false,
+                toBeType: 'automatyzacja'
+            },
+            'K9': {
+                id: 'K9',
+                title: 'Wysłanie oferty do klienta mailowo',
+                phase: 'FAZA III',
+                status: 'zadanie',
+                desc: 'Handlowiec komponuje wiadomość e-mail z ofertą i wysyła ją do klienta. Proces wychodzi z systemów wewnętrznych firmy i jest trudny do dalszego śledzenia.',
+                toBe: 'Automatyczna wysyłka spersonalizowanego maila z ofertą przez system CRM (wykorzystujący szablon LLM dostosowany do klienta).',
+                isBottleneck: false,
+                toBeType: 'automatyzacja'
+            },
+            'B5': {
+                id: 'B5',
+                title: 'Bramka 5: Czy czas oczekiwania był akceptowalny?',
+                phase: 'FAZA IV',
+                status: 'decyzja',
+                desc: 'Kluczowa chwila prawdy. Czy klient doczekał się oferty, czy ze względu na długi czas jej przygotowania poszedł szukać u konkurencji.',
+                toBe: 'Skrócenie czasu ofertowania do poniżej 5 minut eliminuje to ryzyko u ponad 98% klientów.',
+                isBottleneck: false,
+                toBeType: 'automatyzacja'
+            },
+            'Neg1': {
+                id: 'Neg1',
+                title: 'Przegrana: Klient kupił u konkurencji',
+                phase: 'FAZA IV',
+                status: 'wąskie gardło',
+                desc: 'Zanim nasza oferta dotarła do klienta (co trwało np. 4 godziny lub kolejny dzień roboczy), lokalny konkurent wycenił i dostarczył część na miejsce.',
+                toBe: 'Automatyczne zbieranie przyczyn odrzucenia ofert i analiza trendów na pulpitach managerskich (AI Dashboard) w celu korekty cenników.',
+                muda: 'Muda utraconych szans biznesowych i utopionego kosztu pracy.',
+                isBottleneck: true,
+                toBeType: 'automatyzacja'
+            },
+            'Oczekiwanie': {
+                id: 'Oczekiwanie',
+                title: 'Oczekiwanie na decyzję klienta',
+                phase: 'FAZA IV',
+                status: 'zadanie',
+                desc: 'Oferta wisi w próżni. Handlowiec nie ma mechanizmu przypomnienia i skupia się na bieżących, wpadających zapytaniach.',
+                toBe: 'Automatyczne śledzenie statusu i wyświetleń oferty w czasie rzeczywistym (CRM generuje alert dla handlowca, gdy klient otworzy link).',
+                isBottleneck: false,
+                toBeType: 'automatyzacja'
+            },
+            'B6': {
+                id: 'B6',
+                title: 'Bramka 6: Czy klient sam wraca z decyzją?',
+                phase: 'FAZA IV',
+                status: 'decyzja',
+                desc: 'Czy klient ma na tyle zdeterminowaną potrzebę zakupową, by samodzielnie dzwonić i potwierdzić chęć realizacji zamówienia.',
+                toBe: 'Silnik powiadomień CRM proaktywnie monitoruje interakcję z klientem w tle.',
+                isBottleneck: false,
+                toBeType: 'automatyzacja'
+            },
+            'Poz1': {
+                id: 'Poz1',
+                title: 'SUKCES: Realizacja zamówienia',
+                phase: 'FAZA IV',
+                status: 'sukces',
+                desc: 'Zamówienie zostaje sfinalizowane. Mimo to w procesie AS-IS trwało to zbyt długo, kosztowało mnóstwo wysiłku, a marża była daleka od optymalnej.',
+                toBe: 'Automatyczne zlecenie wydania części do magazynu, wysłanie faktury i aktualizacja bazy wiedzy AI o pomyślnej transakcji.',
+                isBottleneck: false,
+                toBeType: 'automatyzacja'
+            },
+            'K10': {
+                id: 'K10',
+                title: 'Całkowity brak zorganizowanego follow-up\'u',
+                phase: 'FAZA IV',
+                status: 'wąskie gardło',
+                desc: 'Ponad 60% wysłanych ofert nigdy nie jest ponownie sprawdzanych. Handlowiec nie dzwoni, nie pyta. Oferty po prostu "umierają" w zapomnieniu.',
+                toBe: 'Automatyczne przypomnienia follow-up (SMS/Email oparte na LLM) wysyłane automatycznie do klienta po 24h z linkiem do szybkiej akceptacji.',
+                muda: 'Muda marnowania wykonanej pracy i braku domknięcia lejka sprzedaży.',
+                isBottleneck: true,
+                toBeType: 'automatyzacja'
+            },
+            'Neg2': {
+                id: 'Neg2',
+                title: 'Utrata Klienta: Porzucenie oferty',
+                phase: 'FAZA IV',
+                status: 'wąskie gardło',
+                desc: 'Klient zapomina o ofercie, znajduje alternatywę lub rezygnuje. Oferta ląduje w koszu, brak wyciągania wniosków.',
+                toBe: 'Automatyczna analiza Win/Loss na pulpitach managerskich (AI based dashboards). System klasyfikuje trendy odrzuceń i podaje predykcje cenowe.',
+                muda: 'Muda marnowania szans i brak analityki przyczyn przegranej.',
+                isBottleneck: true,
+                toBeType: 'automatyzacja'
+            }
+        };
+
+        let zoom = 1.0;
+        const zoomStep = 0.1;
+        const minZoom = 0.3;
+        const maxZoom = 2.0;
+        let isDragging = false;
+        let startX, startY;
+        let scrollLeft, scrollTop;
+        let currentActiveNodeId = null;
+        let isToBeMode = false;
+
+        const viewport = document.getElementById('canvasViewport');
+        const svg = document.getElementById('processSvg');
+        const zoomPercent = document.getElementById('zoomPercent');
+
+        viewport.addEventListener('mousedown', (e) => {
+            if (e.target.closest('g.cursor-pointer')) return; 
+            isDragging = true;
+            viewport.style.cursor = 'grabbing';
+            startX = e.pageX - viewport.offsetLeft;
+            startY = e.pageY - viewport.offsetTop;
+            scrollLeft = viewport.scrollLeft;
+            scrollTop = viewport.scrollTop;
+        });
+
+        viewport.addEventListener('mouseleave', () => {
+            isDragging = false;
+            viewport.style.cursor = 'grab';
+        });
+
+        viewport.addEventListener('mouseup', () => {
+            isDragging = false;
+            viewport.style.cursor = 'grab';
+        });
+
+        viewport.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            e.preventDefault();
+            const x = e.pageX - viewport.offsetLeft;
+            const y = e.pageY - viewport.offsetTop;
+            const walkX = (x - startX) * 1.5; 
+            const walkY = (y - startY) * 1.5;
+            viewport.scrollLeft = scrollLeft - walkX;
+            viewport.scrollTop = scrollTop - walkY;
+        });
+
+        // Touch dla urządzeń mobilnych
+        viewport.addEventListener('touchstart', (e) => {
+            if (e.target.closest('g.cursor-pointer')) return;
+            isDragging = true;
+            startX = e.touches[0].pageX - viewport.offsetLeft;
+            startY = e.touches[0].pageY - viewport.offsetTop;
+            scrollLeft = viewport.scrollLeft;
+            scrollTop = viewport.scrollTop;
+        });
+
+        viewport.addEventListener('touchend', () => {
+            isDragging = false;
+        });
+
+        viewport.addEventListener('touchmove', (e) => {
+            if (!isDragging) return;
+            const x = e.touches[0].pageX - viewport.offsetLeft;
+            const y = e.touches[0].pageY - viewport.offsetTop;
+            const walkX = (x - startX) * 1.5;
+            const walkY = (y - startY) * 1.5;
+            viewport.scrollLeft = scrollLeft - walkX;
+            viewport.scrollTop = scrollTop - walkY;
+        });
+
+        // Kontrola powiększenia (Zoom)
+        function applyZoom() {
+            svg.style.transform = `scale(${zoom})`;
+            svg.style.transformOrigin = '0 0';
+            zoomPercent.textContent = `${Math.round(zoom * 100)}%`;
+            svg.style.width = `${3600 * zoom}px`;
+            svg.style.height = `${650 * zoom}px`;
+        }
+
+        document.getElementById('zoomInBtn').addEventListener('click', () => {
+            if (zoom < maxZoom) {
+                zoom += zoomStep;
+                applyZoom();
+            }
+        });
+
+        document.getElementById('zoomOutBtn').addEventListener('click', () => {
+            if (zoom > minZoom) {
+                zoom -= zoomStep;
+                applyZoom();
+            }
+        });
+
+        document.getElementById('zoomResetBtn').addEventListener('click', () => {
+            zoom = 1.0;
+            applyZoom();
+            viewport.scrollLeft = 0;
+            viewport.scrollTop = 0;
+        });
+
+        viewport.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            if (e.deltaY < 0) {
+                if (zoom < maxZoom) zoom += zoomStep;
+            } else {
+                if (zoom > minZoom) zoom -= zoomStep;
+            }
+            applyZoom();
+        }, { passive: false });
+
+        function selectNode(nodeId) {
+            // Usuń poprzednie zaznaczenie
+            if (currentActiveNodeId) {
+                const prevNode = document.getElementById(`node-${currentActiveNodeId}`);
+                if (prevNode) {
+                    const rect = prevNode.querySelector('rect') || prevNode.querySelector('polygon');
+                    rect.classList.remove('node-active');
+                }
+            }
+
+            // Ukryj stan świecenia bazy danych AI przy ponownym kliknięciu
+            const aiDbEl = document.getElementById('node-ai-db');
+            if (aiDbEl) aiDbEl.querySelector('path').setAttribute('stroke', '#10b981');
+
+            currentActiveNodeId = nodeId;
+            const nodeData = processNodes[nodeId];
+
+            const currentNode = document.getElementById(`node-${nodeId}`);
+            if (currentNode) {
+                const rect = currentNode.querySelector('rect') || currentNode.querySelector('polygon');
+                rect.classList.add('node-active');
+
+                // Centruj widok na wybranym elemencie
+                const rectBounds = rect.getBoundingClientRect();
+                const viewportBounds = viewport.getBoundingClientRect();
+                const nodeX = (rect.getAttribute('x') || rect.getAttribute('points').split(',')[0]) * zoom;
+                
+                viewport.scrollTo({
+                    left: nodeX - (viewportBounds.width / 2) + 100,
+                    behavior: 'smooth'
+                });
+            }
+
+            // Wypełnij panel boczny danymi
+            document.getElementById('welcomeDetail').classList.add('hidden');
+            document.getElementById('activeDetail').classList.remove('hidden');
+
+            document.getElementById('nodePhase').textContent = nodeData.phase;
+            
+            // Zmiana tytułu w zależności od trybu
+            if (isToBeMode) {
+                if (nodeData.toBeType === 'automatyzacja') {
+                    document.getElementById('nodeTitle').innerHTML = `<span class="text-purple-400">🤖 [AUTO]</span> ${nodeData.title.replace(' 🔴', '')}`;
+                } else if (nodeData.toBeType === 'praca_czlowieka') {
+                    document.getElementById('nodeTitle').innerHTML = `<span class="text-yellow-400">👤 [MANUAL]</span> ${nodeData.title.replace(' 🔴', '')}`;
+                } else {
+                    document.getElementById('nodeTitle').innerHTML = nodeData.title.replace(' 🔴', '');
+                }
+                document.getElementById('nodeDesc').textContent = nodeData.toBe;
+            } else {
+                document.getElementById('nodeTitle').innerHTML = nodeData.title;
+                document.getElementById('nodeDesc').textContent = nodeData.desc;
+            }
+
+            // Aktualizacja sekcji typu zadania w TO-BE
+            const typeBox = document.getElementById('toBeTypeBox');
+            const typeIcon = document.getElementById('toBeTypeIcon');
+            const typeText = document.getElementById('toBeTypeText');
+            
+            if (isToBeMode) {
+                typeBox.classList.remove('hidden');
+                if (nodeData.toBeType === 'automatyzacja') {
+                    typeBox.className = "p-3 rounded-xl mb-4 bg-purple-500/10 border border-purple-500/30 text-purple-200";
+                    typeIcon.innerHTML = '<i class="fa-solid fa-robot text-purple-400"></i>';
+                    typeText.textContent = "Pełna automatyzacja (System / AI)";
+                } else if (nodeData.toBeType === 'praca_czlowieka') {
+                    typeBox.className = "p-3 rounded-xl mb-4 bg-yellow-500/10 border border-yellow-500/30 text-yellow-200";
+                    typeIcon.innerHTML = '<i class="fa-solid fa-user-gear text-yellow-400"></i>';
+                    typeText.textContent = "Praca Człowieka (Weryfikacja/Zatwierdzenie)";
+                } else {
+                    typeBox.className = "p-3 rounded-xl mb-4 bg-slate-800 border border-slate-700 text-slate-300";
+                    typeIcon.innerHTML = '<i class="fa-solid fa-circle text-slate-400"></i>';
+                    typeText.textContent = "Punkt kontrolny / wejście";
+                }
+            } else {
+                typeBox.classList.add('hidden');
+            }
+
+            const statusBadge = document.getElementById('nodeStatusBadge');
+            statusBadge.textContent = isToBeMode ? (nodeData.toBeType === 'automatyzacja' ? 'automatyczne' : 'manualne') : nodeData.status;
+            
+            // Styl badge statusu
+            statusBadge.className = 'text-[10px] font-bold uppercase px-2 py-1 rounded';
+            if (isToBeMode) {
+                if (nodeData.toBeType === 'automatyzacja') {
+                    statusBadge.classList.add('bg-purple-500/20', 'text-purple-300', 'border', 'border-purple-500/40');
+                } else {
+                    statusBadge.classList.add('bg-yellow-500/20', 'text-yellow-300', 'border', 'border-yellow-500/40');
+                }
+                document.getElementById('mudaBox').classList.add('hidden');
+            } else {
+                if (nodeData.status === 'wąskie gardło') {
+                    statusBadge.classList.add('bg-red-500/20', 'text-red-400', 'border', 'border-red-500/40');
+                    document.getElementById('mudaBox').classList.remove('hidden');
+                    document.getElementById('nodeMuda').textContent = nodeData.muda;
+                } else if (nodeData.status === 'sukces') {
+                    statusBadge.classList.add('bg-emerald-500/20', 'text-emerald-400', 'border', 'border-emerald-500/40');
+                    document.getElementById('mudaBox').classList.add('hidden');
+                } else if (nodeData.status === 'wejście') {
+                    statusBadge.classList.add('bg-cyan-500/20', 'text-cyan-400', 'border', 'border-cyan-500/40');
+                    document.getElementById('mudaBox').classList.add('hidden');
+                } else {
+                    statusBadge.classList.add('bg-amber-500/20', 'text-amber-400', 'border', 'border-amber-500/40');
+                    document.getElementById('mudaBox').classList.add('hidden');
+                }
+            }
+
+            document.getElementById('nodeToBe').textContent = nodeData.toBe;
+        }
+
+        // Akcja po kliknięciu bazy danych AI
+        function selectAIDatabase() {
+            const aiDbEl = document.getElementById('node-ai-db');
+            if (aiDbEl) {
+                aiDbEl.querySelector('path').setAttribute('stroke', '#34d399');
+            }
+            document.getElementById('welcomeDetail').classList.add('hidden');
+            document.getElementById('activeDetail').classList.remove('hidden');
+
+            document.getElementById('nodePhase').textContent = "SYSTEM CENTRALNY";
+            document.getElementById('nodeTitle').innerHTML = '<span class="text-emerald-400"><i class="fa-solid fa-database mr-1"></i> Silnik AI (Proces_3)</span>';
+            document.getElementById('nodeDesc').textContent = 'Zintegrowana baza wiedzy i silnik rekomendacyjny AI, który w tle łączy dane o klientach, stany magazynowe ERP, API hurtowników zewnętrznych oraz historię awaryjności zamienników. Odpowiada za automatyczne wsparcie procesu w fazie I, II, III i IV.';
+            
+            const statusBadge = document.getElementById('nodeStatusBadge');
+            statusBadge.textContent = 'baza wiedzy';
+            statusBadge.className = 'text-[10px] font-bold uppercase px-2 py-1 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40';
+            
+            document.getElementById('toBeTypeBox').classList.add('hidden');
+            document.getElementById('mudaBox').classList.add('hidden');
+            document.getElementById('nodeToBe').textContent = 'Silnik AI eliminuje potrzebę "wiedzy w głowie" handlowców, automatycznie sugerując właściwe części i zamienniki.';
+        }
+
+        // Nawigacja przyciskami Poprzedni / Następny
+        const orderedNodeIds = [
+            'InA', 'InB', 'K1', 'B1', 'KSpec', 'K2', 'K3', 'K4', 'B2', 'K5', 'B3', 'K5_Tak', 'K5_Nie', 'K6', 'B4', 'K7', 'K8', 'K9', 'B5', 'Neg1', 'Oczekiwanie', 'B6', 'Poz1', 'K10', 'Neg2'
+        ];
+
+        document.getElementById('prevStepBtn').addEventListener('click', () => {
+            if (!currentActiveNodeId) return;
+            let idx = orderedNodeIds.indexOf(currentActiveNodeId);
+            if (idx > 0) {
+                selectNode(orderedNodeIds[idx - 1]);
+            }
+        });
+
+        document.getElementById('nextStepBtn').addEventListener('click', () => {
+            if (!currentActiveNodeId) return;
+            let idx = orderedNodeIds.indexOf(currentActiveNodeId);
+            if (idx < orderedNodeIds.length - 1) {
+                selectNode(orderedNodeIds[idx + 1]);
+            }
+        });
+
+        const viewAsIsBtn = document.getElementById('viewAsIsBtn');
+        const viewToBeBtn = document.getElementById('viewToBeBtn');
+
+        function toggleMode(toBeEnabled) {
+            isToBeMode = toBeEnabled;
+            
+            const badge = document.getElementById('badgeCurrentMode');
+            const headerIcon = document.getElementById('headerIcon');
+            const legendAsIs = document.getElementById('legendAsIs');
+            const legendToBe = document.getElementById('legendToBe');
+            const aiDb = document.getElementById('node-ai-db');
+            const aiConns = document.getElementById('ai-connections');
+
+            if (isToBeMode) {
+                // Konfiguracja stylów przycisku TO-BE
+                viewToBeBtn.className = "px-3 py-1.5 text-xs font-semibold rounded-md bg-purple-600 text-white transition shadow-lg shadow-purple-900/30";
+                viewAsIsBtn.className = "px-3 py-1.5 text-xs font-semibold rounded-md text-slate-300 hover:text-white transition";
+                
+                badge.textContent = "TO-BE";
+                badge.className = "text-xs px-2.5 py-0.5 rounded-full font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30";
+                
+                headerIcon.className = "p-2 bg-purple-600 text-white rounded-lg";
+                
+                legendAsIs.classList.add('hidden');
+                legendToBe.classList.remove('hidden');
+
+                // Pokaż bazę danych AI i dedykowane relacje
+                aiDb.setAttribute('opacity', '1');
+                aiConns.setAttribute('opacity', '0.6');
+
+                // Zmiana nazw faz na fioletowe, bezstratne
+                document.getElementById('phaseText2').textContent = "FAZA II: Automatyczna Identyfikacja i Dobór (Bezstratna)";
+                document.getElementById('phaseText3').textContent = "FAZA III: Automatyczna Wycena i Kontrola Marży";
+                document.getElementById('phaseText4').textContent = "FAZA IV: Wynik i Automatyczny Follow-up";
+
+                // Aktualizacja wizualna węzłów procesu na model Proces_3
+                orderedNodeIds.forEach(id => {
+                    const nodeEl = document.getElementById(`node-${id}`);
+                    if (nodeEl) {
+                        const data = processNodes[id];
+                        const rect = nodeEl.querySelector('rect') || nodeEl.querySelector('polygon');
+                        
+                        // Przypisanie kolorów w oparciu o Proces_3
+                        if (data.toBeType === 'automatyzacja') {
+                            // FIOLETOWY - Automatyzacja
+                            rect.setAttribute('fill', '#4c1d95');
+                            rect.setAttribute('stroke', '#a855f7');
+                            rect.setAttribute('fill-opacity', '0.6');
+                            nodeEl.classList.remove('bottleneck-pulse');
+                        } else if (data.toBeType === 'praca_czlowieka') {
+                            // ŻÓŁTY - Praca Człowieka
+                            rect.setAttribute('fill', '#713f12');
+                            rect.setAttribute('stroke', '#eab308');
+                            rect.setAttribute('fill-opacity', '0.6');
+                            nodeEl.classList.remove('bottleneck-pulse');
+                        }
+
+                        // Aktualizacja tekstów w węzłach na wersję TO-BE
+                        updateNodeTexts(id, true);
+                    }
+                });
+
+                // Zmiana markerów połączeń na fioletowe
+                document.getElementById('connectors').setAttribute('stroke', '#a855f7');
+                document.getElementById('connectors').setAttribute('marker-end', 'url(#arrow-active)');
+
+            } else {
+                // Przywrócenie trybu AS-IS
+                viewAsIsBtn.className = "px-3 py-1.5 text-xs font-semibold rounded-md bg-amber-500 text-slate-950 transition";
+                viewToBeBtn.className = "px-3 py-1.5 text-xs font-semibold rounded-md text-slate-300 hover:text-white transition";
+                
+                badge.textContent = "AS-IS";
+                badge.className = "text-xs px-2.5 py-0.5 rounded-full font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30";
+                
+                headerIcon.className = "p-2 bg-indigo-600 text-white rounded-lg";
+                
+                legendAsIs.classList.remove('hidden');
+                legendToBe.classList.add('hidden');
+
+                // Ukryj bazę danych AI
+                aiDb.setAttribute('opacity', '0');
+                aiConns.setAttribute('opacity', '0');
+
+                // Przywrócenie nazw faz z opisem strat
+                document.getElementById('phaseText2').textContent = "FAZA II: Identyfikacja i Dobór Produktu (Wąskie Gardła)";
+                document.getElementById('phaseText3').textContent = "FAZA III: Wycena i Konstruowanie Oferty";
+                document.getElementById('phaseText4').textContent = "FAZA IV: Wynik i Follow-up";
+
+                // Przywrócenie pierwotnych barw i tekstów AS-IS
+                orderedNodeIds.forEach(id => {
+                    const nodeEl = document.getElementById(`node-${id}`);
+                    if (nodeEl) {
+                        const data = processNodes[id];
+                        const rect = nodeEl.querySelector('rect') || nodeEl.querySelector('polygon');
+                        
+                        if (data.status === 'wąskie gardło') {
+                            rect.setAttribute('fill', '#991b1b');
+                            rect.setAttribute('stroke', '#ef4444');
+                            rect.setAttribute('fill-opacity', '0.4');
+                            nodeEl.classList.add('bottleneck-pulse');
+                        } else if (data.status === 'sukces') {
+                            rect.setAttribute('fill', '#064e3b');
+                            rect.setAttribute('stroke', '#10b981');
+                            rect.setAttribute('fill-opacity', '0.8');
+                        } else if (data.status === 'wejście') {
+                            rect.setAttribute('fill', '#1e293b');
+                            rect.setAttribute('stroke', '#00acc1');
+                            rect.setAttribute('fill-opacity', '1');
+                        } else {
+                            rect.setAttribute('fill', '#b45309');
+                            rect.setAttribute('stroke', '#f59e0b');
+                            rect.setAttribute('fill-opacity', '0.3');
+                        }
+
+                        // Przywrócenie tekstów AS-IS
+                        updateNodeTexts(id, false);
+                    }
+                });
+
+                // Zmiana markerów połączeń na standardowe szare
+                document.getElementById('connectors').setAttribute('stroke', '#475569');
+                document.getElementById('connectors').setAttribute('marker-end', 'url(#arrow)');
+            }
+
+            if (currentActiveNodeId) {
+                selectNode(currentActiveNodeId);
+            }
+        }
+
+        function updateNodeTexts(nodeId, isToBe) {
+            const t1 = document.getElementById(`txt-${nodeId}-t1`);
+            const t2 = document.getElementById(`txt-${nodeId}-t2`);
+            const t3 = document.getElementById(`txt-${nodeId}-t3`);
+
+            if (!t2) return; // Pomijamy węzły bez dynamicznych id tekstów (jak wejścia/decyzje)
+
+            if (isToBe) {
+                // Wersja TO-BE (wzorowana na Proces_3)
+                if (nodeId === 'K1') {
+                    t1.textContent = '🤖 Automatyzacja'; t1.setAttribute('fill', '#d8b4fe');
+                    t2.textContent = 'Rejestracja i autoweryfikacja';
+                    t3.textContent = 'kompletności AI (E-mail/Głos)';
+                } else if (nodeId === 'KSpec') {
+                    t1.textContent = '🤖 Automatyzacja'; t1.setAttribute('fill', '#d8b4fe');
+                    t2.textContent = 'Automatyczne pobranie';
+                    t3.textContent = 'historii i danych VIN (CEPiK)';
+                } else if (nodeId === 'K2') {
+                    t1.textContent = '🤖 Automatyzacja'; t1.setAttribute('fill', '#d8b4fe');
+                    t2.textContent = 'Wyszukiwanie katalogowe';
+                    t3.textContent = 'indeksów (Fuzzy Search)';
+                } else if (nodeId === 'K3') {
+                    t1.textContent = '🤖 Automatyzacja'; t1.setAttribute('fill', '#d8b4fe');
+                    t2.textContent = 'Automatyczne sprawdzanie';
+                    t3.textContent = 'stanów magazynu ERP';
+                } else if (nodeId === 'K4') {
+                    t1.textContent = '🤖 Automatyzacja'; t1.setAttribute('fill', '#d8b4fe');
+                    t2.textContent = 'Automatyczne odpytanie';
+                    t3.textContent = 'baz kooperantów (API)';
+                } else if (nodeId === 'K5') {
+                    t1.textContent = '🤖 Automatyzacja'; t1.setAttribute('fill', '#d8b4fe');
+                    t2.textContent = 'Rekomendacja zamienników';
+                    t3.textContent = 'przez asystenta AI';
+                } else if (nodeId === 'K5_Tak') {
+                    t1.textContent = '👤 Handlowiec'; t1.setAttribute('fill', '#fef08a');
+                    t2.textContent = 'Weryfikacja ekspercka';
+                    t3.textContent = 'wyboru części';
+                } else if (nodeId === 'K5_Nie') {
+                    t1.textContent = '🤖 Automatyzacja'; t1.setAttribute('fill', '#d8b4fe');
+                    t2.textContent = 'Autokontrola zgodności';
+                    t3.textContent = 'blokada złych zamienników';
+                } else if (nodeId === 'K6') {
+                    t1.textContent = '🤖 Automatyzacja'; t1.setAttribute('fill', '#d8b4fe');
+                    t2.textContent = 'Dynamic pricing - autowycona';
+                    t3.textContent = 'zgodnie z marżą';
+                } else if (nodeId === 'K7') {
+                    t1.textContent = '👤 Manager'; t1.setAttribute('fill', '#fef08a');
+                    t2.textContent = 'Get confirmation from manager';
+                    t3.textContent = 'akceptacja wyjątków';
+                } else if (nodeId === 'K8') {
+                    t1.textContent = '🤖 Automatyzacja'; t1.setAttribute('fill', '#d8b4fe');
+                    t2.textContent = 'Generowanie oferty PDF';
+                    t3.textContent = 'oraz linku online';
+                } else if (nodeId === 'K9') {
+                    t1.textContent = '🤖 Automatyzacja'; t1.setAttribute('fill', '#d8b4fe');
+                    t2.textContent = 'Automatyczne wysłanie';
+                    t3.textContent = 'oferty (E-mail AI/SMS)';
+                } else if (nodeId === 'Oczekiwanie') {
+                    t1.textContent = '🤖 Automatyzacja'; t1.setAttribute('fill', '#d8b4fe');
+                    t2.textContent = 'Śledzenie statusu';
+                    t3.textContent = 'i wyświetleń linku (CRM)';
+                } else if (nodeId === 'K10') {
+                    t1.textContent = '🤖 Automatyzacja'; t1.setAttribute('fill', '#d8b4fe');
+                    t2.textContent = 'Automatyczne przypomnienia';
+                    t3.textContent = 'follow-up (LLM)';
+                } else if (nodeId === 'Neg1') {
+                    t1.textContent = '📈 AI Dashboards'; t1.setAttribute('fill', '#fecaca');
+                    t2.textContent = 'Analiza trendów i przyczyn';
+                    t3.textContent = 'rezygnacji klientów';
+                } else if (nodeId === 'Neg2') {
+                    t1.textContent = '📊 AI Predykcje'; t1.setAttribute('fill', '#fecaca');
+                    t2.textContent = 'Automatyczne wnioski';
+                    t3.textContent = 'i optymalizacja cenników';
+                } else if (nodeId === 'Poz1') {
+                    t1.textContent = '🟢 Sukces'; t1.setAttribute('fill', '#a7f3d0');
+                    t2.textContent = 'Sfinalizowanie zamówienia';
+                    t3.textContent = 'i wysyłka do kuriera';
+                }
+            } else {
+                // Powrót do wersji AS-IS
+                t1.setAttribute('fill', '#fef08a');
+                if (nodeId === 'K1') {
+                    t1.textContent = 'Krok 1'; t2.textContent = 'Odbiór zapytania i'; t3.textContent = 'analiza wstępna';
+                } else if (nodeId === 'KSpec') {
+                    t1.textContent = 'Krok Specjalny 🔴'; t1.setAttribute('fill', '#fca5a5');
+                    t2.textContent = 'Przeszukiwanie bazy'; t3.textContent = 'historii zamówień';
+                } else if (nodeId === 'K2') {
+                    t1.textContent = 'Krok 2 🔴'; t1.setAttribute('fill', '#fca5a5');
+                    t2.textContent = 'Przeszukanie'; t3.textContent = '1.8 mln indeksów';
+                } else if (nodeId === 'K3') {
+                    t1.textContent = 'Krok 3 🔴'; t1.setAttribute('fill', '#fca5a5');
+                    t2.textContent = 'Logowanie i'; t3.textContent = 'weryfikacja ERP';
+                } else if (nodeId === 'K4') {
+                    t1.textContent = 'Krok 4 🔴'; t1.setAttribute('fill', '#fca5a5');
+                    t2.textContent = 'Przeszukiwanie baz'; t3.textContent = 'dostawców zewn.';
+                } else if (nodeId === 'K5') {
+                    t1.textContent = 'Krok 5 🔴'; t1.setAttribute('fill', '#fca5a5');
+                    t2.textContent = 'Dobór intuicyjny'; t3.textContent = '("z głowy")';
+                } else if (nodeId === 'K5_Tak') {
+                    t1.textContent = 'Sukces Doboru'; t2.textContent = 'Bezawaryjny'; t3.textContent = 'właściwy produkt';
+                } else if (nodeId === 'K5_Nie') {
+                    t1.textContent = 'Błąd Doboru 🔴'; t1.setAttribute('fill', '#fca5a5');
+                    t2.textContent = 'Ryzyko pomyłki'; t3.textContent = 'i zwrotu części';
+                } else if (nodeId === 'K6') {
+                    t1.textContent = 'Krok 6 🔴'; t1.setAttribute('fill', '#fca5a5');
+                    t2.textContent = 'Wycena manualna'; t3.textContent = 'pod presją czasu';
+                } else if (nodeId === 'K7') {
+                    t1.textContent = 'Krok 7 🔴'; t1.setAttribute('fill', '#fca5a5');
+                    t2.textContent = 'Zawyżony rabat'; t3.textContent = '"dla spokoju"';
+                } else if (nodeId === 'K8') {
+                    t1.textContent = 'Krok 8'; t2.textContent = 'Generowanie'; t3.textContent = 'zestawienia cen';
+                } else if (nodeId === 'K9') {
+                    t1.textContent = 'Krok 9'; t2.textContent = 'Wysłanie oferty'; t3.textContent = 'do klienta e-mail';
+                } else if (nodeId === 'Oczekiwanie') {
+                    t1.textContent = 'Status'; t2.textContent = 'Oczekiwanie na'; t3.textContent = 'decyzję klienta';
+                } else if (nodeId === 'K10') {
+                    t1.textContent = 'Krok 10 🔴'; t1.setAttribute('fill', '#fca5a5');
+                    t2.textContent = 'Brak aktywnego'; t3.textContent = "follow-up'u";
+                } else if (nodeId === 'Neg1') {
+                    t1.textContent = 'Zakup u konkurencji 🔴'; t1.setAttribute('fill', '#fca5a5');
+                    t2.textContent = 'Zbyt długi czas'; t3.textContent = 'wyceny (do 2 dni)';
+                } else if (nodeId === 'Neg2') {
+                    t1.textContent = 'Utrata Klienta 🔴'; t1.setAttribute('fill', '#fca5a5');
+                    t2.textContent = 'Porzucenie oferty'; t3.textContent = 'bez rozstrzygnięcia';
+                } else if (nodeId === 'Poz1') {
+                    t1.textContent = 'Wygrana 🟢'; t1.setAttribute('fill', '#d1fae5');
+                    t2.textContent = 'Realizacja'; t3.textContent = 'zamówienia!';
+                }
+            }
+        }
+
+        viewAsIsBtn.addEventListener('click', () => toggleMode(false));
+        viewToBeBtn.addEventListener('click', () => toggleMode(true));
+
+        let simStep = 0;
+        const simScenario = [
+            {
+                phase: 'I / IV',
+                progress: 10,
+                textAsIs: 'Klient dzwoni z trasy, potrzebuje pilnie wycenę klocków do Passata (2016). Twierdzi: "Dajcie to co ostatnio". Handlowiec notuje szczątkowe informacje na kartce papieru.',
+                textToBe: 'Klient dzwoni, asystent Speech-to-Text AI od razu identyfikuje klienta po numerze telefonu, parsuje rozmowę w locie i zakłada sprawę w CRM, automatycznie weryfikując jego flotę.',
+                node: 'InB'
+            },
+            {
+                phase: 'I / IV',
+                progress: 25,
+                textAsIs: 'Handlowiec poświęca 15 minut na ręczne wertowanie archiwalnych, papierowych faktur i dokumentów w starym systemie, próbując namierzyć, co było zamawiane poprzednio.',
+                textToBe: 'System CRM połączony z Silnikiem AI natychmiast wyciąga z bazy historię zamówień tego klienta oraz automatycznie uzupełnia brakujące dane pojazdu z bazy CEPiK po numerze rejestracyjnym.',
+                node: 'KSpec'
+            },
+            {
+                phase: 'II / IV',
+                progress: 40,
+                textAsIs: 'Ręczne wyszukiwanie indeksów w katalogu 1.8 mln pozycji. Każda literówka powoduje brak wyników. Handlowiec denerwuje się, tracąc kolejne cenne minuty.',
+                textToBe: 'Inteligentny silnik Elasticsearch z obsługą literówek (fuzzy matching) w ułamku sekundy zwraca właściwy indeks oraz powiązania handlowe.',
+                node: 'K2'
+            },
+            {
+                phase: 'II / IV',
+                progress: 55,
+                textAsIs: 'Brak towaru na magazynie. Handlowiec loguje się po kolei na portale 5 kooperantów, by sprawdzić ceny i dostępność. Trwa to od kilkunastu minut do nawet kilku godzin.',
+                textToBe: 'System automatycznie, za pomocą API, odpytuje wszystkich zewnętrznych dostawców i w jednym oknie wyświetla porównanie cen i czasów dostaw.',
+                node: 'K4'
+            },
+            {
+                phase: 'II / IV',
+                progress: 70,
+                textAsIs: 'Klient potrzebuje tańszego zamiennika. Młodszy handlowiec wybiera tani, ale awaryjny zamiennik z głowy, ryzykując zwrot towaru i kłopoty przy montażu.',
+                textToBe: 'Silnik Wiedzy AI automatycznie wyświetla listę sprawdzonych zamienników z oceną awaryjności i kompatybilności. Handlowiec (Junior) musi jedynie zatwierdzić sugestię.',
+                node: 'K5'
+            },
+            {
+                phase: 'III / IV',
+                progress: 85,
+                textAsIs: 'Pod presją czasu handlowiec daje maksymalny dopuszczalny rabat (np. 35%), aby klient nie odszedł. Firma traci dużą część zysku bez systemowej kontroli marży.',
+                textToBe: 'Algorytm Dynamic Pricing automatycznie oblicza optymalną cenę. Jeśli handlowiec zażąda rabatu poza bezpieczny próg marży, system wysyła automatyczny alert do managera o zgodę.',
+                node: 'K7'
+            },
+            {
+                phase: 'IV / IV',
+                progress: 100,
+                textAsIs: 'E-mail z ofertą wychodzi po 3 godzinach. Klient nie odpowiada. Oferta zostaje zapomniana w skrzynce, ponieważ handlowiec nie ma czasu na ponowny kontakt.',
+                textToBe: 'Klient otrzymuje ofertę w 5 minut jako interaktywny link. Gdy go otwiera, CRM alarmuje handlowca. Po 24h system automatycznie wysyła miłe przypomnienie z rabatem ważnym 4h.',
+                node: 'K10'
+            }
+        ];
+
+        function startWalkthrough() {
+            simStep = 0;
+            document.getElementById('walkthroughModal').classList.remove('hidden');
+            updateSimStep();
+        }
+
+        function closeWalkthrough() {
+            document.getElementById('walkthroughModal').classList.add('hidden');
+        }
+
+        function nextSimStep() {
+            if (simStep < simScenario.length - 1) {
+                simStep++;
+                updateSimStep();
+            } else {
+                closeWalkthrough();
+            }
+        }
+
+        function prevSimStep() {
+            if (simStep > 0) {
+                simStep--;
+                updateSimStep();
+            }
+        }
+
+        function updateSimStep() {
+            const data = simScenario[simStep];
+            document.getElementById('simTextAsIs').textContent = data.textAsIs;
+            document.getElementById('simTextToBe').textContent = data.textToBe;
+            document.getElementById('simPhase').textContent = data.phase;
+            document.getElementById('simProgressBar').style.width = `${data.progress}%`;
+            
+            // Sterowanie przyciskami
+            document.getElementById('simPrevBtn').disabled = simStep === 0;
+            document.getElementById('simNextBtn').textContent = simStep === simScenario.length - 1 ? 'Zakończ i zamknij' : 'Następny Krok';
+
+            // Podświetl i wycentruj powiązany krok na diagramie
+            selectNode(data.node);
+        }
+
+        document.getElementById('walkthroughBtn').addEventListener('click', startWalkthrough);
+
+        window.onload = function() {
+            // Domyślnie zaznaczamy pierwszy krok "Zapytanie E-mail" na start
+            selectNode('InA');
+        };
+    </script>
+</body>
+</html>
